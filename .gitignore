@@ -1,0 +1,6 @@
+# macOS metadata
+.DS_Store
+
+# CLion / JetBrains
+.idea/
+cmake-build-debug/
