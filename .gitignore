@@ -1,6 +1,29 @@
-# macOS metadata
-.DS_Store
-
-# CLion / JetBrains
-.idea/
+# Ignore build dirs
 cmake-build-debug/
+CMakeFiles/
+CMakeCache.txt
+*.ninja
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Ignore Clion files
+.idea/
+.vscode/
+
+# Ignore compiled files
+*.out
+*.exe
+*.o
+*.obj
+*.so
+*.dll
+*.a
+*.lib
+
+# Ignore OSX files
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+*.log

@@ -11,13 +11,15 @@
 #include <ctime>
 #include <random>
 
+#include <unistd.h>
+
 ////    Welcome to Ethan's Minesweeper     ////
 
 using namespace sf;
 using namespace std;
 
 //TODO: ADD A TIMER
-//TODO: ADD A LEADERBOARD
+//FIXME: LEADERBOARD
 //TODO: ADD VICTORY SCREEN
 //TODO: ADD COUNTER
 //TODO: ADD PAUSE AND PLAY
@@ -31,7 +33,6 @@ void checkNorth(vector<Tile>& tiles, int columns, int rows, int gameOver, int fi
 void checkSouth(vector<Tile>& tiles, int columns, int rows, int gameOver, int firstPosition, int count);
 void checkDiag(vector<Tile>& tiles, int columns, int rows, int gameOver, int firstPosition, int count);
 static mt19937 rng(time(0)); //Random Number Generator
-
 
 static int intRNG(int min, int max) {
     uniform_int_distribution<int> dist(min, max);
@@ -81,6 +82,25 @@ vector<string> readLeaderboardText() { //Reads the board_config.cfg file and ret
         vec.push_back(temp);
     }
     return vec;
+}
+
+// initializer timer sprites
+void initTimerSprites(vector<Sprite>& timerSprites, Texture& digitTexture, vector<IntRect>& digitRects, int columns, int rows) {
+    for (int i = 0; i < 4; i++) {
+        timerSprites.emplace_back(digitTexture, digitRects[0]);  // Start at 0
+        timerSprites[i].setPosition(((columns * 32) - 97) + (i * 21), 32 * (rows + 0.5f) + 16);
+    }
+}
+
+// updates timer sprites based on the time
+void updateTimerSprites(vector<Sprite>& timerSprites, vector<IntRect>& digitRects, int timeElapsed) {
+    int minutes = (timeElapsed / 60) % 100;
+    int seconds = timeElapsed % 60;
+
+    timerSprites[0].setTextureRect(digitRects[minutes / 10]); // First digit (minutes tens place)
+    timerSprites[1].setTextureRect(digitRects[minutes % 10]); // Second digit (minutes ones place)
+    timerSprites[2].setTextureRect(digitRects[seconds / 10]); // Third digit (seconds tens place)
+    timerSprites[3].setTextureRect(digitRects[seconds % 10]); // Fourth digit (seconds ones place)
 }
 
 
@@ -571,7 +591,11 @@ void recursiveCheck(vector<Tile>& tiles, int columns, int rows, int gameOver, in
 
 
 int main() {
-    string playerName; //Variable for the player's name which is provided during the WelcomeScreen
+
+    char* cwd = getcwd(NULL, 0);
+    std::cout << "Current working directory: " << cwd << std::endl;
+
+    string playerName; // player's name which provided during the WelcomeScreen
     int columns = readcfg().at(0);
     int rows = readcfg().at(1);
     int numMines = readcfg().at(2);
@@ -579,19 +603,16 @@ int main() {
     int height = (rows * 32) + 100;
 
 
-    cout << "Columns: " << columns << " Rows: " << rows << " numMines: " << numMines << endl; //debugga
-    cout << "Width: " << width << " Height: " << height << endl; //debugga
+    cout << "Columns: " << columns << " Rows: " << rows << " numMines: " << numMines << endl; // debuggin purposes
+    cout << "Width: " << width << " Height: " << height << endl; // debuggin purposes
 
-    WelcomeScreen wscreen(width, height); //Generates the WelcomeScreen object
-    wscreen.run(); //Runs the WelcomeScreen
+    WelcomeScreen wscreen(width, height); // generates the WelcomeScreen object
+    wscreen.run(); // runs the WelcomeScreen
     playerName = wscreen.playerName;
     cout << "Player Name: " << playerName << endl;
 
-    //After this the game window should be generated and the game should start
-
-    //Loads all Textures required for the game
+    // loads all Textures required for the game
     Sprite debug(TextureMaker::GetTexture("debug"));
-    Sprite digits(TextureMaker::GetTexture("digits"));
     Sprite happyface(TextureMaker::GetTexture("face_happy"));
     Sprite winface(TextureMaker::GetTexture("face_win"));
     Sprite loseface(TextureMaker::GetTexture("face_lose"));
@@ -611,60 +632,47 @@ int main() {
     Sprite tileHidden(TextureMaker::GetTexture("tile_hidden"));
     Sprite tileRevealed(TextureMaker::GetTexture("tile_revealed"));
 
-    //Set the intrect to (i*21, 0, 21, 32)
-    IntRect digitZero(0,0,21,32);
-    IntRect digitOne(21,0,21,32);
-    IntRect digitTwo(2*21,0,21,32);
-    IntRect digitThree(3*21,0,21,32);
-    IntRect digitFour(4*21,0,21,32);
-    IntRect digitFive(5*21,0,21,32);
-    IntRect digitSix(6*21,0,21,32);
-    IntRect digitSeven(7*21,0,21,32);
-    IntRect digitEight(8*21,0,21,32);
-    IntRect digitNine(9*21,0,21,32);
-    IntRect digitalDash(10*21,0,21,32);
 
-    Sprite sZero(TextureMaker::GetTexture("digits"),digitZero);
-    Sprite sOne(TextureMaker::GetTexture("digits"), digitOne);
-    Sprite sTwo(TextureMaker::GetTexture("digits"), digitTwo);
+    Texture& digitTexture = TextureMaker::GetTexture("digits");
+    vector<IntRect> digitRects;
+    for (int i = 0; i <= 9; i++) {
+        digitRects.emplace_back(i * 21, 0, 21, 32);
+    }
 
-
-
+    // intialize timer sprites
+    vector<Sprite> timerSprites;
+    initTimerSprites(timerSprites, digitTexture, digitRects, columns, rows);
 
 
     Board board;
     Tile tile;
+
+    // TODO: Implement flagging
     int flagCount = 0;
-    int tilesWMines = 0; //Number of tiles with mines
+
+    int tilesWithMines = 0; //Number of tiles with mines
 
     board.SetColumns(columns);
     board.SetRows(rows);
     board.SetMineCount(numMines);
 
     vector<Tile> tilesVec(rows * columns); //Sets up a vector of tiles to be used in the game
+
+    // Initializes tiles in the tilesVec
     for (unsigned int i = 0; i < rows * columns; i++)
     {
         tilesVec.at(i) = tile;
     }
 
+    // Loop to intialize the mines in the game
 
-    while(tilesWMines != numMines)
+    // Sets random tiles w/i tilesVec to be mines
+    for(unsigned int i = 0; i < numMines - tilesWithMines; i++)
     {
-        int temp = numMines - tilesWMines;
-        tilesWMines = 0;
-        for(unsigned int i = 0; i < temp; i++) //Sets random tiles w/i tilesVec to be mines
-        {
-            tilesVec.at(intRNG(0, rows * columns - 1)).SetIsMineTrue();
-        }
+        tilesVec.at(intRNG(0, rows * columns - 1)).SetIsMineTrue();
+        tilesWithMines++;
+    }
 
-        for(unsigned int i = 0; i < tilesVec.size(); i++) //Checks how many mines are in tilesVec
-        {
-            if(tilesVec.at(i).GetIsMine())
-            {
-                tilesWMines++;
-            }
-        }
-    } //Loop to intialize the mines in the game
 
     for (unsigned int i = 0; i < tilesVec.size(); i++)
     {
@@ -770,19 +778,27 @@ int main() {
     bool click = false;
     bool win = false;
 
-    sf::RenderWindow window(sf::VideoMode(width, height), "Minesweeper", Style::Close);
+    RenderWindow window(sf::VideoMode(width, height), "Minesweeper", Style::Close);
+    window.setFramerateLimit(60);
+
+    Clock gameClock;
+    Time prevTime = Time::Zero;
+    int elapsedSeconds = 0;
 
 
-    //While the game window is open
+    // While the game window is open
     while(window.isOpen())
     {
+
         Event event;
 
-        //While there are events to be processed
+        // While there are events to be processed
         while(window.pollEvent(event)) {
-            //Clear the window with white
+
+            // Clear the window with white
             window.clear(Color::White);
-            //Close window clause
+
+            // Close window clause
             if (event.type == Event::Closed) {
                 window.close();
             }
@@ -792,6 +808,8 @@ int main() {
                 //Draws the happy face
                 happyface.setPosition(((columns / 2) * 32) - 32, 32 * (rows + 0.5f));
                 window.draw(happyface);
+
+                // TODO: Draw timer here
 
 
                 //If the mouse button is clicked
@@ -826,13 +844,14 @@ int main() {
                         //If the mouse is clicked on somewhere within the lower buttons
                         if (event.mouseButton.y >= (height - 100) && event.mouseButton.y <= (height - 32)) {
 
-                            //If you click on the pause button WORKS
+                            //If you click on the pause button
                             if (event.mouseButton.x >= 560 && event.mouseButton.x <= 624) {
                                 if(event.mouseButton.y >= 528 && event.mouseButton.y <= 592) {
                                     cout << "Pause button was pressed" << endl;
                                 }
                             }
-                            //If you click on the leaderboard sprite WORKS
+
+                            //If you click on the leaderboard sprite
                             if (event.mouseButton.x >= 624 && event.mouseButton.x <= 688) {
                                 if(event.mouseButton.y >= 528 && event.mouseButton.y <= 592) {
                                     cout << "Leaderboard button was pressed" << endl;
@@ -840,6 +859,7 @@ int main() {
                                     lscreen.run();
                                 }
                             }
+
                             //DEBUG WORKS
                             if (event.mouseButton.x >= 496 && event.mouseButton.x <= 560) {
                                 if (showMines == true) {
@@ -854,6 +874,7 @@ int main() {
                         }
                     }
 
+                    // FIXME: Get this working
                     ////RMB is clicked
                     //If the RMB is clicked/Flag placement
                     if (event.mouseButton.button == Mouse::Right) {
@@ -921,7 +942,6 @@ int main() {
             int counter = 0;
 
             //Nested loops to check each tile *DONE*
-
 
             for (unsigned int i = 0; i < rows; i++) {
                 for (unsigned int j = 0; j < columns; j++) {
@@ -1067,63 +1087,40 @@ int main() {
             }
 
 
+            //// TODO: buttons work but need to fix leaderboard screen and add pause screen
 
-            /*
-            ////WIP == buttons work but need to add leaderboard screen and pause screen
             debug.setPosition((columns * 32) -  304, 32 * (rows + 0.5f)); //
             window.draw(debug);
-            //cout << debug.getPosition().x << " " << debug.getPosition().y << endl;
+
             leaderboard.setPosition((columns * 32) -176, 32 * (rows + 0.5f)); //
             window.draw(leaderboard);
-            //cout << "leaderboard : " << leaderboard.getPosition().x << " " << leaderboard.getPosition().y << endl;
+
             pause.setPosition((columns * 32) - 240, 32 * (rows + 0.5f)); //
             window.draw(pause);
-            //cout << "Pause: " << pause.getPosition().x << " " << pause.getPosition().y << endl;
-            */
-            /*
-            //COUNTER
-            sZero.setPosition(33, 32 * (rows+0.5f)+16);
-            window.draw(sZero);
-            sZero.setPosition(sZero.getPosition().x + 21, sZero.getPosition().y);
-            window.draw(sZero);
-            sZero.setPosition(sZero.getPosition().x + 21, sZero.getPosition().y);
-            window.draw(sZero);
-            */
-            /*
-            //TIME
-            auto start = chrono::steady_clock::now();
-            int seconds_counted = 0;
 
-            while(gameOver == 0) {
-                auto end = chrono::steady_clock::now();
-                auto diff = end - start;
-                auto time = chrono::duration_cast<chrono::seconds>(diff).count();
-                if (time > seconds_counted) {
-                    seconds_counted = time;
-                    cout << "Time: " << seconds_counted << endl;
-
-                }
-            }
-            */
-
-
-            sZero.setPosition(((columns*32)-97), 32*(rows+0.5f )+16);
-            window.draw(sZero);
-
-            sZero.setPosition(((columns*32)-76), 32*(rows+0.5f )+16);
-            window.draw(sZero);
-
-            sZero.setPosition(((columns*32)-54), 32*(rows+0.5f )+16);
-            window.draw(sZero);
-
-            sZero.setPosition(((columns*32)-33), 32*(rows+0.5f )+16);
-            window.draw(sZero);
-
-
-
-            //Finally
-            window.display();
         }
+
+        // get the time difference
+        Time currentTime = gameClock.getElapsedTime();
+        Time deltaTime = currentTime - prevTime;
+
+        // updates timer every second
+        if (deltaTime.asSeconds() >= 1.0f) {
+            prevTime = currentTime;  // Reset the reference time
+            elapsedSeconds++;
+
+            updateTimerSprites(timerSprites, digitRects, elapsedSeconds);
+
+            // timer debugger
+            cout << "Timer: " << elapsedSeconds / 60 << ":"
+                 << setw(2) << setfill('0') << (elapsedSeconds % 60) << endl;
+        }
+
+        for (auto& sprite : timerSprites) {
+            window.draw(sprite);
+        }
+
+        window.display();
     }
     return 0;
 }
